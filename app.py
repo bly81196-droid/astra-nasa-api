@@ -1,5 +1,5 @@
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, render_template
 from datetime import datetime, timezone, timedelta
 import requests
 
@@ -10,16 +10,13 @@ NASA_DONKI_BASE = "https://ccmc.gsfc.nasa.gov/DONKI-API/get"
 ALLOWED_EVENTS = ["SEP", "FLR", "CME", "GST"]
 
 
+# Main ASTRA Dashboard
 @app.route("/")
 def home():
-    return jsonify({
-        "project": "ASTRA",
-        "message": "ASTRA API is running",
-        "status": "success",
-        "timestamp": datetime.now(timezone.utc).isoformat()
-    })
+    return render_template("index.html")
 
 
+# Health Check
 @app.route("/health")
 def health():
     return jsonify({
@@ -28,6 +25,7 @@ def health():
     })
 
 
+# API Status
 @app.route("/api/status")
 def api_status():
     return jsonify({
@@ -35,13 +33,14 @@ def api_status():
         "service": "NASA Data Processing API",
         "status": "online",
         "data_sources": {
-            "NASA_DONKI": "connected",
+            "NASA_DONKI": "available",
             "NASA_OSDR": "not_connected",
             "Radiation_Dosimetry": "not_connected"
         }
     })
 
 
+# NASA DONKI Events API
 @app.route("/api/donki")
 def get_donki_events():
 
@@ -55,7 +54,6 @@ def get_donki_events():
         }), 400
 
     today = datetime.now(timezone.utc).date()
-
     default_start = today - timedelta(days=7)
 
     start_date = request.args.get(
