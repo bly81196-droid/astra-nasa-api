@@ -1,0 +1,353 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ASTRA | Space Radiation Awareness</title>
+<style>
+:root {
+  --bg:#07111f;
+  --panel:#101f32;
+  --panel2:#142840;
+  --cyan:#48d9e8;
+  --text:#f1f7fc;
+  --muted:#9bb0c5;
+  --border:#263c53;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--bg);color:var(--text);
+  font-family:Arial,sans-serif;
+}
+header{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:22px 6%;border-bottom:1px solid var(--border);
+  background:#091727;
+}
+.logo{font-size:28px;font-weight:800;letter-spacing:3px}
+.logo span{color:var(--cyan)}
+.status{color:#65e3a4;font-size:13px}
+main{max-width:1200px;margin:auto;padding:35px 22px}
+.eyebrow{color:var(--cyan);font-size:12px;letter-spacing:2px}
+h1{font-size:32px;margin:10px 0}
+.subtitle{color:var(--muted);line-height:1.6}
+.toolbar{
+  display:flex;justify-content:space-between;align-items:center;
+  gap:12px;flex-wrap:wrap;margin:28px 0 18px;
+}
+button{
+  background:var(--cyan);color:#061522;border:0;
+  padding:12px 19px;border-radius:8px;font-weight:bold;
+  cursor:pointer;
+}
+button:disabled{opacity:.6;cursor:wait}
+.cards{
+  display:grid;grid-template-columns:repeat(4,1fr);
+  gap:15px;margin:18px 0 28px;
+}
+.card,.section{
+  background:var(--panel);border:1px solid var(--border);
+  border-radius:13px;padding:20px;
+}
+.card small{color:var(--muted)}
+.number{font-size:34px;font-weight:bold;color:var(--cyan);margin:13px 0}
+.section{margin-top:20px}
+.section h2{font-size:19px;margin-top:0}
+.events{width:100%;border-collapse:collapse}
+.events th,.events td{
+  text-align:left;padding:13px 10px;
+  border-bottom:1px solid var(--border);font-size:13px;
+}
+.events th{color:var(--cyan)}
+.events td{color:#d8e5f0}
+.events a{color:var(--cyan)}
+.pill{
+  display:inline-block;padding:5px 9px;border-radius:20px;
+  background:#183c4d;color:var(--cyan);font-size:11px;
+}
+.message{color:var(--muted);font-size:13px;margin-top:12px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.bar-row{display:grid;grid-template-columns:55px 1fr 30px;gap:10px;
+align-items:center;margin:15px 0;font-size:13px;color:var(--muted)}
+.track{height:9px;background:#263c53;border-radius:10px;overflow:hidden}
+.fill{height:100%;background:var(--cyan);border-radius:10px}
+footer{
+  border-top:1px solid var(--border);padding:25px;
+  text-align:center;color:var(--muted);font-size:12px;margin-top:40px;
+}
+@media(max-width:850px){
+  .cards{grid-template-columns:repeat(2,1fr)}
+  .grid2{grid-template-columns:1fr}
+}
+@media(max-width:520px){
+  h1{font-size:25px}
+  .cards{grid-template-columns:1fr 1fr;gap:9px}
+  .card{padding:13px}
+  .number{font-size:27px}
+  .events th,.events td{padding:9px 6px;font-size:11px}
+  main{padding:25px 13px}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">AST<span>R</span>A</div>
+  <div class="status">● NASA DATA DASHBOARD</div>
+</header>
+
+<main>
+  <div class="eyebrow">SPACE WEATHER MONITORING PLATFORM</div>
+  <h1>Space Weather Dashboard</h1>
+  <p class="subtitle">
+    Monitor solar activity and explore NASA space weather events
+    through an integrated scientific dashboard.
+  </p>
+
+  <div class="toolbar">
+    <div>
+      <strong>NASA DONKI Data</strong>
+      <div class="message" id="updated">Waiting for data...</div>
+    </div>
+    <button id="refresh" onclick="loadAll()">↻ Refresh Data</button>
+  </div>
+
+  <div class="cards">
+    <div class="card">
+      <small>Solar Flares</small>
+      <div class="number" id="FLR">—</div>
+      <span class="pill">FLR Events</span>
+    </div>
+    <div class="card">
+      <small>Coronal Mass Ejections</small>
+      <div class="number" id="CME">—</div>
+      <span class="pill">CME Events</span>
+    </div>
+    <div class="card">
+      <small>Solar Particle Events</small>
+      <div class="number" id="SEP">—</div>
+      <span class="pill">SEP Events</span>
+    </div>
+    <div class="card">
+      <small>Geomagnetic Storms</small>
+      <div class="number" id="GST">—</div>
+      <span class="pill">GST Events</span>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <section class="section">
+      <h2>Solar Events Overview</h2>
+      <div id="bars">
+        <p class="message">Loading event statistics...</p>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>About ASTRA</h2>
+      <p class="subtitle">
+        ASTRA brings space weather information and astronaut
+        health research data into one monitoring workspace.
+      </p>
+      <p class="subtitle">
+        Solar events can help researchers understand changing
+        space weather conditions. They are not direct measurements
+        of an astronaut's radiation dose.
+      </p>
+      <span class="pill">NASA DONKI Integration</span>
+    </section>
+  </div>
+
+  <section class="section">
+    <h2>Latest Solar Events</h2>
+    <div style="overflow-x:auto">
+      <table class="events">
+        <thead>
+          <tr>
+            <th>Event</th>
+            <th>Date</th>
+            <th>Classification</th>
+            <th>Details</th>
+          </tr>
+        </thead>
+        <tbody id="eventRows">
+          <tr><td colspan="4">Loading NASA events...</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="message" id="tableMessage"></div>
+  </section>
+
+  <section class="section">
+    <h2>Data Sources & Scientific Notes</h2>
+    <p class="subtitle">
+      Space weather events are retrieved through NASA DONKI.
+      Biological research datasets from NASA OSDR are a separate
+      data category and do not represent direct radiation dosimetry.
+    </p>
+    <p><a href="https://ccmc.gsfc.nasa.gov/tools/DONKI/" target="_blank"
+      style="color:var(--cyan)">NASA DONKI</a></p>
+    <p><a href="https://osdr.nasa.gov/" target="_blank"
+      style="color:var(--cyan)">NASA Open Science Data Repository</a></p>
+  </section>
+</main>
+
+<footer>
+  ASTRA — Astronaut Safety Through Radiation Awareness<br>
+  NASA Space Apps Challenge 2026
+</footer>
+
+<script>
+const types = ["FLR","CME","SEP","GST"];
+const labels = {
+  FLR:"Solar Flare",
+  CME:"Coronal Mass Ejection",
+  SEP:"Solar Particle Event",
+  GST:"Geomagnetic Storm"
+};
+
+let allEvents = [];
+
+async function getEvents(type) {
+  const response = await fetch(
+    `/api/donki?type=${encodeURIComponent(type)}`,
+    {cache:"no-store"}
+  );
+  if (!response.ok) {
+    throw new Error(`${type}: HTTP ${response.status}`);
+  }
+  const data = await response.json();
+  if (data.status === "error") {
+    throw new Error(data.message || `${type} data unavailable`);
+  }
+  return data;
+}
+
+function eventDate(event) {
+  return event.startTime || event.beginTime ||
+         event.peakTime || event.activityID || "Date unavailable";
+}
+
+function eventClass(event) {
+  return event.classType || event.classTypeName ||
+         event.type || "Not provided";
+}
+
+function eventLink(event) {
+  return event.link || "";
+}
+
+function renderTable(events) {
+  const body = document.getElementById("eventRows");
+  body.innerHTML = "";
+
+  if (!events.length) {
+    body.innerHTML =
+      '<tr><td colspan="4">No events returned for this period.</td></tr>';
+    return;
+  }
+
+  events.slice(0,50).forEach(item => {
+    const type = item._astraType;
+    const date = eventDate(item);
+    const classification = eventClass(item);
+    const link = eventLink(item);
+
+    const row = document.createElement("tr");
+    const values = [
+      labels[type] || type,
+      date,
+      classification
+    ];
+
+    values.forEach(value => {
+      const cell = document.createElement("td");
+      cell.textContent = value;
+      row.appendChild(cell);
+    });
+
+    const details = document.createElement("td");
+    if (link) {
+      const a = document.createElement("a");
+      a.href = link;
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.textContent = "NASA Details ↗";
+      details.appendChild(a);
+    } else {
+      details.textContent = "Not available";
+    }
+    row.appendChild(details);
+    body.appendChild(row);
+  });
+}
+
+function renderBars(counts) {
+  const max = Math.max(1,...Object.values(counts));
+  document.getElementById("bars").innerHTML =
+    types.map(type => `
+      <div class="bar-row">
+        <span>${type}</span>
+        <div class="track">
+          <div class="fill" style="width:${counts[type]/max*100}%"></div>
+        </div>
+        <strong>${counts[type]}</strong>
+      </div>
+    `).join("");
+}
+
+async function loadAll() {
+  const button = document.getElementById("refresh");
+  const update = document.getElementById("updated");
+  const tableMessage = document.getElementById("tableMessage");
+
+  button.disabled = true;
+  button.textContent = "Loading...";
+  update.textContent = "Connecting to NASA data service...";
+  tableMessage.textContent = "";
+
+  const counts = {};
+  const collected = [];
+  const errors = [];
+
+  await Promise.all(types.map(async type => {
+    try {
+      const data = await getEvents(type);
+      const events = Array.isArray(data.events) ? data.events : [];
+      counts[type] = Number(data.event_count ?? events.length);
+
+      events.forEach(event => {
+        collected.push({...event,_astraType:type});
+      });
+      document.getElementById(type).textContent = counts[type];
+    } catch(error) {
+      counts[type] = 0;
+      document.getElementById(type).textContent = "—";
+      errors.push(error.message);
+    }
+  }));
+
+  allEvents = collected;
+  renderBars(counts);
+  renderTable(allEvents);
+
+  const now = new Date();
+  update.textContent = "Last checked: " + now.toLocaleString();
+
+  if (errors.length) {
+    tableMessage.textContent =
+      "Some data sources could not be loaded: " + errors.join(" | ");
+  } else {
+    tableMessage.textContent =
+      "All four NASA DONKI event requests completed successfully.";
+  }
+
+  button.disabled = false;
+  button.textContent = "↻ Refresh Data";
+}
+
+loadAll();
+</script>
+</body>
+</html>
