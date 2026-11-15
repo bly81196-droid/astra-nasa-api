@@ -1,13 +1,21 @@
 
-from flask import Flask, jsonify, request, render_template
+import csv
+from pathlib import Path
+from statistics import mean, median
 from datetime import datetime, timezone, timedelta
+
 import requests
+from flask import Flask, jsonify, request, render_template
+
 
 app = Flask(__name__)
 
+# NASA DONKI
 NASA_DONKI_BASE = "https://ccmc.gsfc.nasa.gov/DONKI-API/get"
-
 ALLOWED_EVENTS = ["SEP", "FLR", "CME", "GST"]
+
+# NASA OSDR Radiation Data
+RADIATION_CSV = Path(app.root_path) / "ASTRA_DosTel1_NASA.csv"
 
 
 # Main ASTRA Dashboard
@@ -28,14 +36,20 @@ def health():
 # API Status
 @app.route("/api/status")
 def api_status():
+    radiation_available = RADIATION_CSV.is_file()
+
     return jsonify({
         "project": "ASTRA",
         "service": "NASA Data Processing API",
         "status": "online",
         "data_sources": {
             "NASA_DONKI": "available",
-            "NASA_OSDR": "not_connected",
-            "Radiation_Dosimetry": "not_connected"
+            "NASA_OSDR": (
+                "available" if radiation_available else "not_connected"
+            ),
+            "Radiation_Dosimetry": (
+                "available" if radiation_available else "not_connected"
+            )
         }
     })
 
@@ -157,6 +171,162 @@ def get_donki_events():
         }), 502
 
 
+# NASA OSDR Radiation Dosimetry API
+@app.route("/api/radiation")
+def get_radiation_data():
+
+    if not RADIATION_CSV.is_file():
+        return jsonify({
+            "status": "error",
+            "message": "NASA radiation CSV file not found",
+            "expected_file": RADIATION_CSV.name
+        }), 404
+
+    # Optional date filters
+    start_date = request.args.get("start_date")
+    end_date = request.args.get("end_date")
+
+    try:
+        if start_date:
+            datetime.strptime(start_date, "%Y-%m-%d")
+
+        if end_date:
+            datetime.strptime(end_date, "%Y-%m-%d")
+
+    except ValueError:
+        return jsonify({
+            "status": "error",
+            "message": "Dates must use YYYY-MM-DD"
+        }), 400
+
+    if start_date and end_date and start_date > end_date:
+        return jsonify({
+            "status": "error",
+            "message": "Start date cannot be after end date"
+        }), 400
+
+    readings = []
+
+    try:
+        with open(
+            RADIATION_CSV,
+            "r",
+            encoding="utf-8-sig",
+            newline=""
+        ) as file:
+
+            reader = csv.DictReader(file)
+
+            required_columns = {
+                "timestamp",
+                "instrument_id",
+                "absorbed_dose_rate",
+                "instrument",
+                "module",
+                "spacecraft"
+            }
+
+            available_columns = set(reader.fieldnames or [])
+
+            if not required_columns.issubset(available_columns):
+                return jsonify({
+                    "status": "error",
+                    "message": "Unexpected CSV structure",
+                    "required_columns": sorted(required_columns)
+                }), 500
+
+            for row in reader:
+
+                timestamp = row["timestamp"].strip()
+                date_only = timestamp[:10]
+
+                # Validate timestamp
+                try:
+                    datetime.strptime(
+                        timestamp,
+                        "%Y-%m-%dT%H:%M:%S"
+                    )
+                except ValueError:
+                    continue
+
+                # Apply date filters
+                if start_date and date_only < start_date:
+                    continue
+
+                if end_date and date_only > end_date:
+                    continue
+
+                try:
+                    value = float(row["absorbed_dose_rate"])
+                except (ValueError, TypeError):
+                    continue
+
+                if not (value >= 0 and value < float("inf")):
+                    continue
+
+                readings.append({
+                    "timestamp": timestamp,
+                    "instrument_id": row["instrument_id"],
+                    "absorbed_dose_rate": value,
+                    "instrument": row["instrument"],
+                    "module": row["module"],
+                    "spacecraft": row["spacecraft"]
+                })
+
+        # Keep readings in chronological order
+        readings.sort(key=lambda item: item["timestamp"])
+
+        if not readings:
+            return jsonify({
+                "status": "success",
+                "source": "NASA OSDR RadLab",
+                "measurement": "Absorbed dose rate",
+                "unit": "µGy/hour",
+                "reading_count": 0,
+                "message": "No readings found for selected dates",
+                "readings": []
+            })
+
+        values = [
+            item["absorbed_dose_rate"]
+            for item in readings
+        ]
+
+        return jsonify({
+            "status": "success",
+            "source": "NASA OSDR RadLab",
+            "source_file": RADIATION_CSV.name,
+            "measurement": "Absorbed dose rate",
+            "unit": "µGy/hour",
+
+            "instrument": "DosTel1",
+            "module": "Columbus",
+            "spacecraft": "ISS",
+
+            "start_date": readings[0]["timestamp"][:10],
+            "end_date": readings[-1]["timestamp"][:10],
+
+            "reading_count": len(readings),
+
+            "statistics": {
+                "mean": round(mean(values), 6),
+                "median": round(median(values), 6),
+                "minimum": round(min(values), 6),
+                "maximum": round(max(values), 6)
+            },
+
+            "readings": readings
+        })
+
+    except OSError as error:
+        return jsonify({
+            "status": "error",
+            "message": "Could not read radiation CSV file",
+            "details": str(error)
+        }), 500
+
+
+# Run Flask Application
 if __name__ == "__main__":
     app.run(
         host="0.0.0.0",
