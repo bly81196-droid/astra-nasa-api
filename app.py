@@ -2,12 +2,13 @@
 from flask import Flask, jsonify, request
 from datetime import datetime, timezone, timedelta
 import requests
-import os
 
 app = Flask(__name__)
 
-NASA_API_KEY = os.getenv("NASA_API_KEY", "DEMO_KEY")
-NASA_BASE = "https://api.nasa.gov/DONKI"
+NASA_DONKI_BASE = "https://ccmc.gsfc.nasa.gov/DONKI-API/get"
+
+ALLOWED_EVENTS = ["SEP", "FLR", "CME", "GST"]
+
 
 @app.route("/")
 def home():
@@ -18,9 +19,14 @@ def home():
         "timestamp": datetime.now(timezone.utc).isoformat()
     })
 
+
 @app.route("/health")
 def health():
-    return jsonify({"status": "healthy"})
+    return jsonify({
+        "project": "ASTRA",
+        "status": "healthy"
+    })
+
 
 @app.route("/api/status")
 def api_status():
@@ -29,75 +35,95 @@ def api_status():
         "service": "NASA Data Processing API",
         "status": "online",
         "data_sources": {
-            "NASA_DONKI": "available",
+            "NASA_DONKI": "connected",
             "NASA_OSDR": "not_connected",
             "Radiation_Dosimetry": "not_connected"
         }
     })
 
+
 @app.route("/api/donki")
-def donki():
+def get_donki_events():
+
     event_type = request.args.get("type", "SEP").upper()
 
-    allowed_types = ["SEP", "FLR", "CME", "GST"]
-
-    if event_type not in allowed_types:
+    if event_type not in ALLOWED_EVENTS:
         return jsonify({
             "status": "error",
             "message": "Unsupported event type",
-            "allowed_types": allowed_types
+            "allowed_types": ALLOWED_EVENTS
         }), 400
 
-    end_date = request.args.get(
-        "end_date",
-        datetime.now(timezone.utc).date().isoformat()
-    )
+    today = datetime.now(timezone.utc).date()
+
+    default_start = today - timedelta(days=7)
 
     start_date = request.args.get(
         "start_date",
-        (datetime.now(timezone.utc).date() - timedelta(days=7)).isoformat()
+        default_start.isoformat()
+    )
+
+    end_date = request.args.get(
+        "end_date",
+        today.isoformat()
     )
 
     try:
-        start = datetime.strptime(start_date, "%Y-%m-%d").date()
-        end = datetime.strptime(end_date, "%Y-%m-%d").date()
+        start = datetime.strptime(
+            start_date, "%Y-%m-%d"
+        ).date()
+
+        end = datetime.strptime(
+            end_date, "%Y-%m-%d"
+        ).date()
+
     except ValueError:
         return jsonify({
             "status": "error",
             "message": "Dates must use YYYY-MM-DD"
         }), 400
 
-    if start > end or (end - start).days > 30:
+    if start > end:
         return jsonify({
             "status": "error",
-            "message": "Date range must be between 0 and 30 days"
+            "message": "Start date cannot be after end date"
         }), 400
 
-    url = f"{NASA_BASE}/{event_type}"
+    if (end - start).days > 30:
+        return jsonify({
+            "status": "error",
+            "message": "Maximum date range is 30 days"
+        }), 400
+
+    url = f"{NASA_DONKI_BASE}/{event_type}"
 
     try:
         response = requests.get(
             url,
             params={
                 "startDate": start_date,
-                "endDate": end_date,
-                "api_key": NASA_API_KEY
+                "endDate": end_date
             },
-            timeout=25
+            headers={
+                "Accept": "application/json",
+                "User-Agent": "ASTRA-NASA-SpaceApps/1.0"
+            },
+            timeout=30
         )
 
         response.raise_for_status()
+
         events = response.json()
 
         if not isinstance(events, list):
             return jsonify({
                 "status": "error",
-                "message": "Unexpected NASA response"
+                "message": "Unexpected response from NASA DONKI"
             }), 502
 
         return jsonify({
             "status": "success",
-            "source": "NASA DONKI",
+            "source": "NASA CCMC DONKI",
             "event_type": event_type,
             "start_date": start_date,
             "end_date": end_date,
@@ -105,14 +131,37 @@ def donki():
             "events": events
         })
 
-    except requests.RequestException as error:
+    except requests.exceptions.Timeout:
         return jsonify({
             "status": "error",
-            "source": "NASA DONKI",
-            "message": "Could not retrieve NASA data",
+            "message": "NASA DONKI request timed out"
+        }), 504
+
+    except requests.exceptions.HTTPError as error:
+        return jsonify({
+            "status": "error",
+            "source": "NASA CCMC DONKI",
+            "message": "NASA returned an HTTP error",
             "details": str(error)
         }), 502
 
+    except requests.exceptions.RequestException as error:
+        return jsonify({
+            "status": "error",
+            "message": "Could not connect to NASA DONKI",
+            "details": str(error)
+        }), 502
+
+    except ValueError:
+        return jsonify({
+            "status": "error",
+            "message": "NASA returned invalid JSON"
+        }), 502
+
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+    app.run(
+        host="0.0.0.0",
+        port=10000
+    )
 
